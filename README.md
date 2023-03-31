@@ -1,32 +1,46 @@
-# GPT3 Tokenizer
+# GPT4 Tokenizer
 
 [![Build](https://github.com/botisan-ai/gpt3-tokenizer/actions/workflows/main.yml/badge.svg)](https://github.com/botisan-ai/gpt3-tokenizer/actions/workflows/main.yml)
 [![NPM Version](https://img.shields.io/npm/v/gpt3-tokenizer.svg)](https://www.npmjs.com/package/gpt3-tokenizer)
 [![NPM Downloads](https://img.shields.io/npm/dt/gpt3-tokenizer.svg)](https://www.npmjs.com/package/gpt3-tokenizer)
 
-This is a isomorphic TypeScript tokenizer for OpenAI's GPT-3 model. Including support for `gpt3` and `codex` tokenization. It should work in both NodeJS and Browser environments.
+This is a isomorphic TypeScript tokenizer for OpenAI's GPT-4 model. It also includes some utility functions for tokenizing and encoding text for use with the GPT-4 model.
+
+It will work in all cases that `TextEncoder` and `TextDecoder` are globals.
+
 ## Usage
 
 First, install:
 
 ```shell
-yarn add gpt3-tokenizer
+yarn add gpt4-tokenizer
 ```
 
-In code:
+### Estimate token length
 
 ```typescript
-import GPT3Tokenizer from 'gpt3-tokenizer';
+import GPT4Tokenizer from 'gpt4-tokenizer';
 
-const tokenizer = new GPT3Tokenizer({ type: 'gpt3' }); // or 'codex'
-const str = "hello 👋 world 🌍";
-const encoded: { bpe: number[]; text: string[] } = tokenizer.encode(str);
-const decoded = tokenizer.decode(encoded.bpe);
+const tokenizer = new GPT4Tokenizer({ type: 'gpt3' }); // or 'codex'
+const str = 'hello 👋 world 🌍';
+const estimatedTokenCount = tokenizer.estimateTokenCount(str); // 7
+```
+
+### Chunk by token length
+
+```typescript
+import GPT4Tokenizer from 'gpt4-tokenizer';
+
+const tokenizer = new GPT4Tokenizer({ type: 'gpt3' }); // or 'codex'
+const str = 'A very long string...';
+const estimatedTokenCount = tokenizer.chunkText(str, 5); // 7
 ```
 
 ## Reference
 
 This library is based on the following:
+
+- [gpt3-tokenzier](https://github.com/botisan-ai/gpt3-tokenizer)
 - [OpenAI Tokenizer Page Source](https://beta.openai.com/tokenizer?view=bpe)
 - [gpt-3-encoder](https://github.com/latitudegames/GPT-3-Encoder)
 
