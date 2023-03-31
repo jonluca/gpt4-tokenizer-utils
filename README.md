@@ -1,8 +1,8 @@
 # GPT4 Tokenizer
 
-[![Build](https://github.com/botisan-ai/gpt3-tokenizer/actions/workflows/main.yml/badge.svg)](https://github.com/botisan-ai/gpt3-tokenizer/actions/workflows/main.yml)
-[![NPM Version](https://img.shields.io/npm/v/gpt3-tokenizer.svg)](https://www.npmjs.com/package/gpt3-tokenizer)
-[![NPM Downloads](https://img.shields.io/npm/dt/gpt3-tokenizer.svg)](https://www.npmjs.com/package/gpt3-tokenizer)
+[![Build](https://github.com/jonluca/gpt4-tokenizer-utils/actions/workflows/main.yml/badge.svg)](https://github.com/jonluca/gpt4-tokenizer-utils/actions/workflows/main.yml)
+[![NPM Version](https://img.shields.io/npm/v/gpt4-tokenizer-utils.svg)](https://www.npmjs.com/package/gpt4-tokenizer)
+[![NPM Downloads](https://img.shields.io/npm/dt/gpt4-tokenizer-utils.svg)](https://www.npmjs.com/package/gpt4-tokenizer)
 
 This is a isomorphic TypeScript tokenizer for OpenAI's GPT-4 model. It also includes some utility functions for tokenizing and encoding text for use with the GPT-4 model.
 
@@ -40,7 +40,7 @@ const estimatedTokenCount = tokenizer.chunkText(str, 5); // 7
 
 This library is based on the following:
 
-- [gpt3-tokenzier](https://github.com/botisan-ai/gpt3-tokenizer)
+- [gpt3-tokenzier](https://github.com/jonluca/gpt4-tokenizer-utils)
 - [OpenAI Tokenizer Page Source](https://beta.openai.com/tokenizer?view=bpe)
 - [gpt-3-encoder](https://github.com/latitudegames/GPT-3-Encoder)
 
