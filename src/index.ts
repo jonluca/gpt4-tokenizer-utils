@@ -17,7 +17,7 @@ const chr = (n: number): string => {
   return String.fromCharCode(n);
 };
 
-export default class GPT4Tokenizer {
+export class GPT4Tokenizer {
   private vocab: string;
   private nMergedSpaces: number;
   private nVocab: number;
@@ -247,3 +247,4 @@ export default class GPT4Tokenizer {
     return chunks;
   }
 }
+export default GPT4Tokenizer;
