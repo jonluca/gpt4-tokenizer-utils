@@ -30,9 +30,11 @@ export class GPT4Tokenizer {
 
   private bpeRanks: ArrayKeyedMap<[string, string], number>;
   private cache: { [key: string]: string };
+  private encodeCache = new Map<string, number[]>();
+
   private textEncoder: TextEncoder;
   private textDecoder: TextDecoder;
-  constructor(options: { type: 'gpt3' | 'codex' }) {
+  constructor(options: { type: 'gpt3' | 'gpt4' | 'codex' }) {
     this.encodings = encodings;
     this.vocab = bpeVocab;
     this.nMergedSpaces = options.type === 'codex' ? 24 : 0;
@@ -49,10 +51,11 @@ export class GPT4Tokenizer {
     this.initialize();
   }
 
-  initialize() {
+  private initialize() {
     if (this.vocab.length < 100) {
       throw new Error('Tokenizer vocab file did not load correctly');
     }
+
     const vocabLines = this.vocab.split('\n');
     const bpeMerges: [string, string][] = vocabLines
       .slice(1, vocabLines.length - 1)
@@ -89,21 +92,22 @@ export class GPT4Tokenizer {
     this.zip(this.bpeRanks, bpeMerges, range(0, bpeMerges.length));
   }
 
-  zip<X, Y>(result: Map<X, Y>, x: X[], y: Y[]): Map<X, Y> {
-    x.forEach((_, idx) => {
+  private zip<X, Y>(result: Map<X, Y>, x: X[], y: Y[]): Map<X, Y> {
+    let length = x.length;
+    for (let idx = 0; idx < length; idx++) {
       result.set(x[idx], y[idx]);
-    });
+    }
 
     return result;
   }
 
-  bytesToUnicode(): Map<number, string> {
+  private bytesToUnicode(): Map<number, string> {
     const bs = range(ord('!'), ord('~') + 1).concat(
       range(ord('\xa1'), ord('\xac') + 1),
       range(ord('\xae'), ord('\xff') + 1),
     );
 
-    let cs: any[] = bs.slice();
+    let cs: number[] = bs.slice();
     let n = 0;
 
     for (let b = 0; b < Math.pow(2, 8); b++) {
@@ -114,10 +118,13 @@ export class GPT4Tokenizer {
       }
     }
 
-    cs = cs.map((c: number) => chr(c));
+    let csStr = cs as unknown as string[];
+    for (let i = 0; i < cs.length; i++) {
+      csStr[i] = chr(cs[i]);
+    }
 
     const result = new Map<number, string>();
-    this.zip(result, bs, cs as string[]);
+    this.zip(result, bs, csStr);
     return result;
   }
 
@@ -134,7 +141,7 @@ export class GPT4Tokenizer {
     return pairs;
   }
 
-  bpe(token: string) {
+  bpe(token: string): string {
     if (Object.prototype.hasOwnProperty.call(this.cache, token)) {
       return this.cache[token];
     }
@@ -143,18 +150,21 @@ export class GPT4Tokenizer {
 
     let pairs = this.getPairs(word);
 
-    if (!pairs || pairs.size === 0) {
+    if (pairs.size === 0) {
       return token;
     }
 
     while (true) {
-      const minPairs: { [key: number]: [string, string] } = {};
+      let minRank = 1e11;
+      let bigram: [string, string] = ['', ''];
       for (const pair of Array.from(pairs)) {
         const rank = this.bpeRanks.get(pair);
-        minPairs[isNaN(rank as number) ? 1e11 : (rank as number)] = pair;
+        let realRank = isNaN(rank as number) ? 1e11 : (rank as number);
+        if (realRank < minRank) {
+          bigram = pair;
+          minRank = realRank;
+        }
       }
-
-      const bigram = minPairs[Math.min(...Object.keys(minPairs).map((x) => parseInt(x)))];
 
       if (!this.bpeRanks.has(bigram)) {
         break;
@@ -197,26 +207,27 @@ export class GPT4Tokenizer {
     return word;
   }
 
-  encode(text: string): { bpe: number[]; text: string[] } {
-    let bpeTokens: number[] = [];
-    let texts: string[] = [];
+  encode(text: string): number[] {
+    const bpeTokens: number[] = [];
     const matches = text.match(bpeRegex) || [];
 
     for (let token of matches) {
-      token = Array.from(this.encodeUtf8(token))
-        .map((x) => this.byteEncoder.get(x))
-        .join('');
-      const newTokens = this.bpe(token)
-        .split(' ')
-        .map((x) => this.encodings[x]);
-      bpeTokens = bpeTokens.concat(newTokens);
-      texts = texts.concat(newTokens.map((x) => this.decode([x])));
+      let newTokens = this.encodeCache.get(token);
+      if (!newTokens) {
+        token = Array.from(this.encodeUtf8(token))
+          .map((x) => this.byteEncoder.get(x))
+          .join('');
+        newTokens = this.bpe(token)
+          .split(' ')
+          .map((x) => this.encodings[x]);
+        this.encodeCache.set(token, newTokens);
+      }
+      for (let i = 0; i < newTokens.length; i++) {
+        bpeTokens.push(newTokens[i]);
+      }
     }
 
-    return {
-      bpe: bpeTokens,
-      text: texts,
-    };
+    return bpeTokens;
   }
 
   encodeUtf8(text: string): Uint8Array {
@@ -232,16 +243,29 @@ export class GPT4Tokenizer {
   }
 
   estimateTokenCount(input: string): number {
-    return this.encode(input).bpe.length;
+    let count: number = 0;
+    const matches = input.match(bpeRegex) || [];
+
+    for (let token of matches) {
+      token = Array.from(this.encodeUtf8(token))
+        .map((x) => this.byteEncoder.get(x))
+        .join('');
+      const newTokens = this.bpe(token).split(' ');
+      count += newTokens.length;
+    }
+
+    return count;
   }
 
-  chunkText(text: string, maxTokensPerChunk: number): string[] {
+  chunkText(text: string, maxTokensPerChunk: number): { text: string; bpe: number[] }[] {
     const encoded = this.encode(text);
-    const parsedText = encoded.text;
-    const chunks: string[] = [];
-    for (let i = 0; i < parsedText.length; i += maxTokensPerChunk) {
-      const chunk = parsedText.slice(i, i + maxTokensPerChunk);
-      chunks.push(chunk.join(''));
+    const chunks: { text: string; bpe: number[] }[] = [];
+    for (let i = 0; i < encoded.length; i += maxTokensPerChunk) {
+      const chunk = encoded.slice(i, i + maxTokensPerChunk);
+      chunks.push({
+        text: this.decode(chunk),
+        bpe: chunk,
+      });
       // do whatever
     }
     return chunks;
