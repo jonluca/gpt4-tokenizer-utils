@@ -49,6 +49,17 @@ describe('gpt3 tokenizer test', () => {
     expect(tokenizer.decode(encoded)).toEqual(str);
   });
 
+  it('keeps the encode cache keyed by the original text', () => {
+    const tokenizer = new GPT4Tokenizer({ type: 'gpt3' });
+    const freshTokenizer = new GPT4Tokenizer({ type: 'gpt3' });
+
+    tokenizer.encode(' did');
+    const encoded = tokenizer.encode('Ġdid');
+
+    expect(encoded).toEqual(freshTokenizer.encode('Ġdid'));
+    expect(tokenizer.decode(encoded)).toEqual('Ġdid');
+  });
+
   it('works with code using codex', () => {
     const tokenizer = new GPT4Tokenizer({ type: 'codex' });
     const str = "def main():\n    print('hello world')";
@@ -70,6 +81,18 @@ describe('gpt3 tokenizer test', () => {
     const str = 'A string with some length greater than 5';
     const encoded = tokenizer.chunkText(str, 5);
     expect(encoded.map((c) => c.text)).toEqual(['A string with some length', ' greater than 5']);
+  });
+  it('does not split a Unicode character between chunks', () => {
+    const tokenizer = new GPT4Tokenizer({ type: 'gpt3' });
+    const str = 'hello 👋 world 🌍';
+    const chunks = tokenizer.chunkText(str, 5);
+
+    expect(chunks.map((chunk) => chunk.text).join('')).toEqual(str);
+    expect(chunks.flatMap((chunk) => chunk.bpe)).toEqual(tokenizer.encode(str));
+    for (const chunk of chunks) {
+      expect(chunk.bpe.length).toBeLessThanOrEqual(5);
+      expect(tokenizer.decode(chunk.bpe)).toEqual(chunk.text);
+    }
   });
   it('estimates token length correctly', () => {
     const tokenizer = new GPT4Tokenizer({ type: 'codex' });

@@ -42,6 +42,7 @@
     "vitest": "^0.29.8"
   },
   "dependencies": {
-    "array-keyed-map": "^2.1.3"
+    "array-keyed-map": "^2.1.3",
+    "tslib": "^2.5.0"
   }
 }

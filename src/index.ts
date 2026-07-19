@@ -212,7 +212,8 @@ export class GPT4Tokenizer {
     const matches = text.match(bpeRegex) || [];
 
     for (let token of matches) {
-      let newTokens = this.encodeCache.get(token);
+      const cacheKey = token;
+      let newTokens = this.encodeCache.get(cacheKey);
       if (!newTokens) {
         token = Array.from(this.encodeUtf8(token))
           .map((x) => this.byteEncoder.get(x))
@@ -220,7 +221,7 @@ export class GPT4Tokenizer {
         newTokens = this.bpe(token)
           .split(' ')
           .map((x) => this.encodings[x]);
-        this.encodeCache.set(token, newTokens);
+        this.encodeCache.set(cacheKey, newTokens);
       }
       for (let i = 0; i < newTokens.length; i++) {
         bpeTokens.push(newTokens[i]);
@@ -238,8 +239,7 @@ export class GPT4Tokenizer {
     return this.textDecoder.decode(bytes);
   }
   decode(tokens: number[]): string {
-    const text = tokens.map((x) => this.decodings[x]).join('');
-    return this.decodeUtf8(new Uint8Array(text.split('').map((x) => this.byteDecoder.get(x) as number)));
+    return this.decodeUtf8(this.decodeTokensToBytes(tokens));
   }
 
   estimateTokenCount(input: string): number {
@@ -258,17 +258,83 @@ export class GPT4Tokenizer {
   }
 
   chunkText(text: string, maxTokensPerChunk: number): { text: string; bpe: number[] }[] {
+    if (!Number.isInteger(maxTokensPerChunk) || maxTokensPerChunk <= 0) {
+      throw new RangeError('maxTokensPerChunk must be a positive integer');
+    }
+
     const encoded = this.encode(text);
+    const safeBoundaries = this.getUtf8SafeTokenBoundaries(encoded);
     const chunks: { text: string; bpe: number[] }[] = [];
-    for (let i = 0; i < encoded.length; i += maxTokensPerChunk) {
-      const chunk = encoded.slice(i, i + maxTokensPerChunk);
+    let start = 0;
+
+    while (start < encoded.length) {
+      let end = Math.min(start + maxTokensPerChunk, encoded.length);
+
+      while (end > start && !safeBoundaries.has(end)) {
+        end--;
+      }
+
+      if (end === start) {
+        throw new RangeError('maxTokensPerChunk is too small to keep a Unicode character intact');
+      }
+
+      const chunk = encoded.slice(start, end);
       chunks.push({
         text: this.decode(chunk),
         bpe: chunk,
       });
-      // do whatever
+      start = end;
     }
+
     return chunks;
+  }
+
+  private decodeTokensToBytes(tokens: number[]): Uint8Array {
+    const bytes: number[] = [];
+
+    for (const token of tokens) {
+      for (const character of this.decodings[token]) {
+        bytes.push(this.byteDecoder.get(character) as number);
+      }
+    }
+
+    return new Uint8Array(bytes);
+  }
+
+  private getUtf8SafeTokenBoundaries(tokens: number[]): Set<number> {
+    const boundaries = new Set<number>([0]);
+    let continuationBytes = 0;
+
+    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+      for (const byte of this.decodeTokensToBytes([tokens[tokenIndex]])) {
+        if (continuationBytes > 0) {
+          if ((byte & 0xc0) !== 0x80) {
+            throw new Error('Encoded token stream is not valid UTF-8');
+          }
+          continuationBytes--;
+        } else if (byte <= 0x7f) {
+          continue;
+        } else if (byte >= 0xc2 && byte <= 0xdf) {
+          continuationBytes = 1;
+        } else if (byte >= 0xe0 && byte <= 0xef) {
+          continuationBytes = 2;
+        } else if (byte >= 0xf0 && byte <= 0xf4) {
+          continuationBytes = 3;
+        } else {
+          throw new Error('Encoded token stream is not valid UTF-8');
+        }
+      }
+
+      if (continuationBytes === 0) {
+        boundaries.add(tokenIndex + 1);
+      }
+    }
+
+    if (continuationBytes !== 0) {
+      throw new Error('Encoded token stream ended inside a UTF-8 character');
+    }
+
+    return boundaries;
   }
 }
 export default GPT4Tokenizer;
